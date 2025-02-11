@@ -33,20 +33,13 @@ ENV/
 
 # Project specific
 Dataset/
-*.pth
-*.png
-*.jpg
-*.jpeg
 .DS_Store
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb 
+*.ipynb
 
-# Ignore specific Python files
+# Ignore specific files
 haha.py
 nono.py
-
-# Ignore specific Markdown files
 learnthis.md
-technical_details.md
