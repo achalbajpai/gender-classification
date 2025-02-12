@@ -9,9 +9,11 @@ import pandas as pd
 import numpy as np
 import os
 from pathlib import Path
+import tempfile
+import shutil
 
 # Set page config
-st.set_page_config(page_title="Gender Classification", page_icon="👤", layout="wide")
+st.set_page_config(page_title="Gender Classification", page_icon="��", layout="wide")
 
 
 # Model class
@@ -45,6 +47,43 @@ def predict(model, image):
         return probability
 
 
+def process_batch_images(model, uploaded_files):
+    results = []
+
+    for file in uploaded_files:
+        try:
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=os.path.splitext(file.name)[1]
+            ) as tmp_file:
+                # Write the uploaded file to the temporary file
+                shutil.copyfileobj(file, tmp_file)
+
+            # Process the image
+            image = Image.open(tmp_file.name).convert("RGB")
+            transformed_image = transform_image(image)
+            probability = predict(model, transformed_image)
+
+            gender = "Male" if probability > 0.5 else "Female"
+            confidence = probability if probability > 0.5 else 1 - probability
+
+            results.append(
+                {
+                    "filename": file.name,
+                    "predicted_gender": gender,
+                    "confidence": confidence * 100,
+                }
+            )
+
+            # Clean up the temporary file
+            os.unlink(tmp_file.name)
+
+        except Exception as e:
+            st.error(f"Error processing {file.name}: {str(e)}")
+
+    return pd.DataFrame(results)
+
+
 # Main app
 def main():
     st.title("Gender Classification Model")
@@ -52,7 +91,14 @@ def main():
     # Sidebar
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
-        "Go to", ["Home", "Model Details", "Test Model", "Performance Metrics"]
+        "Go to",
+        [
+            "Home",
+            "Model Details",
+            "Test Model",
+            "Batch Processing",
+            "Performance Metrics",
+        ],
     )
 
     if page == "Home":
@@ -63,7 +109,8 @@ def main():
         The model has been trained on a large dataset and achieves 98.22% accuracy in gender prediction.
         
         ### Features:
-        - Upload and test your own images
+        - Upload and test individual images
+        - Batch process multiple images
         - View detailed model architecture and training process
         - Examine model performance metrics
         - Real-time predictions with confidence scores
@@ -88,7 +135,7 @@ def main():
             st.markdown(file.read())
 
     elif page == "Test Model":
-        st.header("Test the Model")
+        st.header("Test Single Image")
 
         # Load model
         try:
@@ -133,6 +180,59 @@ def main():
 
             except Exception as e:
                 st.error(f"Error processing image: {str(e)}")
+
+    elif page == "Batch Processing":
+        st.header("Batch Process Multiple Images")
+
+        # Load model
+        try:
+            model = load_model()
+            st.success("Model loaded successfully!")
+        except Exception as e:
+            st.error(f"Error loading model: {str(e)}")
+            return
+
+        # Multiple file uploader
+        uploaded_files = st.file_uploader(
+            "Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+        )
+
+        if uploaded_files:
+            with st.spinner("Processing images..."):
+                # Process images
+                results_df = process_batch_images(model, uploaded_files)
+
+                # Display results
+                st.subheader("Results:")
+                st.dataframe(results_df)
+
+                # Create visualizations
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # Gender distribution
+                    st.subheader("Gender Distribution")
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    sns.countplot(data=results_df, x="predicted_gender")
+                    plt.title("Predicted Gender Distribution")
+                    st.pyplot(fig)
+
+                with col2:
+                    # Confidence distribution
+                    st.subheader("Confidence Distribution")
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    sns.histplot(data=results_df, x="confidence", bins=20)
+                    plt.title("Prediction Confidence Distribution")
+                    st.pyplot(fig)
+
+                # Download button for results
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    label="Download Results as CSV",
+                    data=csv,
+                    file_name="batch_predictions.csv",
+                    mime="text/csv",
+                )
 
     elif page == "Performance Metrics":
         st.header("Model Performance Metrics")
